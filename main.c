@@ -12,7 +12,7 @@
 /* default bot name */
 char NAME[] = "JensonBotton";
 /* set logging verbosity */
-#define DEBUG 0
+#define DEBUG 1
 /* socket protocol */
 #define TCP 6
 #define IRC_NONSSL_PORT 6667
@@ -21,7 +21,7 @@ char NAME[] = "JensonBotton";
 #define IRC_NICK "JensonBotton_"
 #define IRC_USER "JensonBotton_ * * JensonBotton"
 
-#define PREFIX '>'
+#define PREFIX '-'
 
 /* macros */
 #if DEBUG
@@ -33,6 +33,8 @@ char NAME[] = "JensonBotton";
 regex_t		 match;
 const char  *filter = ":.+!.+@.+ PRIVMSG [#]+.+ :.*";
 
+regex_t		 ping_message;
+const char  *ping_filter = "PING .+";
 
 /* DEBUG: NEEDS EXT. FREE */
 /* get line (no LF) from char buffer, free when done */
@@ -81,26 +83,42 @@ sgetline(char * buf, char **line, int * ptr)
 char *
 filter_cmd(char * msg)
 {
-		regmatch_t   matchchar[BUFSIZ];
-		int nmatch = BUFSIZ;
-		puts("EVALUATING:");
-		puts(msg);
-		puts("-----------");
+		regmatch_t   matchchar[10];
+		int nmatch = 5;
+		char * recv = strdup(msg);
+		
+		int ping_result = regexec(&ping_message,
+			msg,
+			nmatch,
+			matchchar,
+			0);
+		if (ping_result == 0) {
+				LOG("Received ping, responding...");
+				strsep(&recv, " ");
+				/* return message to PONG */
+				return recv;
+		}
+
 		int res = regexec(&match,
 			msg,
 			nmatch,
 			matchchar,
-			REG_NOSUB | REG_EXTENDED);
-		printf("Got regex result: %d\n", res);
+			0);
+
+		if (res == 0) {
+				LOG("Received something from an user");
+		} else return NULL;
 		
-		/* char * recv = strdup(msg); */
-		/* char * cmd = strsep(&recv, " "); */
-		/* /\* safety check *\/ */
-		/* if (cmd != NULL && */
-		/* 	cmd[0] == PREFIX) { */
-		/* 	LOG("received command"); */
-		/* 	LOG(recv); */
-		/* } */
+		for (int i = 0; i < 2; i++) {
+				if (recv != NULL)
+						strsep(&recv, ":");
+		}
+		/* safety check */
+		if (recv != NULL &&
+			recv[0] == PREFIX) {
+			LOG("received command");
+			LOG(recv);
+		}
 		return NULL;
 }
 
@@ -111,10 +129,18 @@ main ()
 		
    int compose = regcomp(&match,
 	   filter,
-	   0);
+	   REG_EXTENDED);
    if (compose != 0) {
-		   LOG("could not compose regex");
-		   regfree(&match);
+		   /* TODO: err handling */
+		   LOG("could not compose COMMAND regex");
+		   exit(1);
+   }
+   int ping_compose = regcomp(&ping_message,
+	   ping_filter,
+	   REG_EXTENDED);
+   if (ping_compose != 0) {
+		   /* TODO: err handling */
+		   LOG("could not compose PING regex");
 		   exit(1);
    }
 
@@ -162,8 +188,10 @@ main ()
    timeout.tv_sec  = 0;
    timeout.tv_nsec = 0;
 
-   LOG("Sending auth details...");
-   sprintf(login, "CAP LS 302\nPASS %s\nNICK %s\nUSER %s\nCAP END\nJOIN #steew\n",
+   LOG("sending auth details...");
+   sprintf(login,
+	   "CAP LS 302\nPASS %s\n"
+	   "NICK %s\nUSER %s\nCAP END\nJOIN #steew\n",
 		   IRC_PASS,
 		   IRC_NICK,
 		   IRC_USER);
@@ -177,7 +205,7 @@ main ()
 	   * non-blocking call */
 	   ret = kevent(kq, NULL, 0, &trigger, 1, &timeout);
 	   if (ret > 0) {
-		   LOG("received something in network socket: ");
+		   LOG("received something in network socket");
 		   bytes = read(sock, buffer, BUFSIZ);
 
 		   char *	line;
@@ -188,28 +216,18 @@ main ()
 			  read character, and pass a count of the read
 			  characters */
 		   while(sgetline(buffer, &line, &ptr) == 0) {
-				   //printf("---- Got a line: %s\n", line);
-				   filter_cmd(line);
+				   char * response = filter_cmd(line);
+				   if (response != NULL) {
+						   char pong[BUFSIZ];
+						   sprintf(pong, "PONG %s\n", response);
+						   puts("Responding with:");
+						   puts(pong);
+						   write(sock, pong, sizeof(pong));
+				   }
 				   memset(line, 0 , BUFSIZ);
 				   free(line);
 		   };
 		   
-/* //		   printf("Ptr: %d, Line [%d]: %s\n",ptr ,i, line); */
-		   		   
-/* 		   char *	recv = strdup(buffer); */
-/* 		   char *	cmd	 = strsep(&recv, " "); */
-/* 		   printf("Received ----->%s\n",	cmd); */
-/* 		   if (strcasecmp("PING", cmd) == 0) { */
-/* 				   LOG("received ping request, responding..."); */
-/* 				   char pong[BUFSIZ]; */
-/* 				   sprintf(pong, "PONG %s\n", recv); */
-/* 				   write(sock, pong, sizeof(pong)); */
-/* 		   } else */
-/* 				   filter_cmd(line); */
-/* 		   free(line); */
-/* 		   free(recv); */
-/* 		   write(STDOUT_FILENO, buffer, bytes); */
-/* 		   LOG("entire socket was read"); */
 		   /* clear the buffer for further use */
 		   memset(buffer, 0, sizeof(buffer));
 	   }
@@ -218,6 +236,7 @@ main ()
    LOG("closing socket...");
    close(sock);
    regfree(&match);
+   regfree(&ping_message);
 }
 
 
