@@ -36,6 +36,13 @@ const char  *filter = ":.+!.+@.+ PRIVMSG [#]+.+ :.*";
 regex_t		 ping_message;
 const char  *ping_filter = "PING .+";
 
+struct filter_cmd_response {
+		/* message to write */
+		char * reply;
+		/* type of reply */
+		enum {PING, NONE, DEFAULT} type;
+};
+
 /* DEBUG: NEEDS EXT. FREE */
 /* get line (no LF) from char buffer, free when done */
 int
@@ -80,12 +87,15 @@ sgetline(char * buf, char **line, int * ptr)
 		return 0;
 }
 
-char *
+struct filter_cmd_response
 filter_cmd(char * msg)
 {
 		regmatch_t   matchchar[10];
 		int nmatch = 5;
 		char * recv = strdup(msg);
+		struct filter_cmd_response response;
+		response.reply = NULL;
+		response.type  = NONE;
 		
 		int ping_result = regexec(&ping_message,
 			msg,
@@ -96,7 +106,9 @@ filter_cmd(char * msg)
 				LOG("Received ping, responding...");
 				strsep(&recv, " ");
 				/* return message to PONG */
-				return recv;
+				response.type = PING;
+				response.reply = recv;
+				return response;
 		}
 
 		int res = regexec(&match,
@@ -107,7 +119,7 @@ filter_cmd(char * msg)
 
 		if (res == 0) {
 				LOG("Received something from an user");
-		} else return NULL;
+		} else return response;
 		
 		for (int i = 0; i < 2; i++) {
 				if (recv != NULL)
@@ -119,7 +131,8 @@ filter_cmd(char * msg)
 			LOG("received command");
 			LOG(recv);
 		}
-		return NULL;
+		/* TODO: actually return something to reply */
+		return response;
 }
 
 int
@@ -216,12 +229,14 @@ main ()
 			  read character, and pass a count of the read
 			  characters */
 		   while(sgetline(buffer, &line, &ptr) == 0) {
-				   char * response = filter_cmd(line);
-				   if (response != NULL) {
+				   struct filter_cmd_response response;
+				   response = filter_cmd(line);
+				   if (response.type == PING) {
 						   char pong[BUFSIZ];
-						   sprintf(pong, "PONG %s\n", response);
-						   puts("Responding with:");
-						   puts(pong);
+						   sprintf(pong, "PONG %s\n", response.reply);
+						   LOG("responding with:");
+						   LOG(pong);
+						   LOG("end ping response");
 						   write(sock, pong, sizeof(pong));
 				   }
 				   memset(line, 0 , BUFSIZ);
@@ -238,5 +253,3 @@ main ()
    regfree(&match);
    regfree(&ping_message);
 }
-
-
