@@ -38,7 +38,9 @@ const char  *ping_filter = "PING .+";
 
 struct filter_cmd_response {
 		/* message to write */
-		char * reply;
+		char reply[BUFSIZ];
+		/* origin channel */
+		char chan[BUFSIZ];
 		/* type of reply */
 		enum {PING, NONE, DEFAULT} type;
 };
@@ -92,9 +94,9 @@ filter_cmd(char * msg)
 {
 		regmatch_t   matchchar[10];
 		int nmatch = 5;
-		char * recv = strdup(msg);
+		char * recv = NULL;
+		recv = strndup(msg, BUFSIZ);
 		struct filter_cmd_response response;
-		response.reply = NULL;
 		response.type  = NONE;
 		
 		int ping_result = regexec(&ping_message,
@@ -107,7 +109,9 @@ filter_cmd(char * msg)
 				strsep(&recv, " ");
 				/* return message to PONG */
 				response.type = PING;
-				response.reply = recv;
+				strcpy(response.reply, recv);
+				memset(recv, 0, BUFSIZ);
+				free(recv);
 				return response;
 		}
 
@@ -119,19 +123,53 @@ filter_cmd(char * msg)
 
 		if (res == 0) {
 				LOG("Received something from an user");
-		} else return response;
+		} else {
+				memset(recv, 0, BUFSIZ);
+				free(recv);
+				return response;
+		}
+
+		char * dup = NULL;
+		dup = strdup(recv);
+		char * chan = NULL;
+		/* get the channel name */
+		for (int i = 0; i < 3; i++) {
+				if (dup != NULL)
+						chan = strsep(&dup, " ");
+		}
+		strcpy(response.chan, chan);
+		free(dup);
+		LOG("Channel:");
+		LOG(response.chan);
 		
+		/* get the sent message */
 		for (int i = 0; i < 2; i++) {
 				if (recv != NULL)
 						strsep(&recv, ":");
+				printf("Step: %d, %s\n", i, recv);
 		}
 		/* safety check */
 		if (recv != NULL &&
 			recv[0] == PREFIX) {
 			LOG("received command");
-			LOG(recv);
+		}
+		/* get the actual command without the prefix */
+		recv += 1;
+		LOG("Command:");
+		LOG(recv);
+		if (strcmp(recv, "hello") == 0) {
+				LOG("Received hello command");
+				char reply[BUFSIZ];
+				sprintf(reply,
+					"\nPRIVMSG %s :Hi! I am %s\n",
+					response.chan,
+					IRC_NICK);
+				strcpy(response.reply, reply);
+				response.type  = DEFAULT;
 		}
 		/* TODO: actually return something to reply */
+		memset(recv, 0, BUFSIZ);
+		free(recv);
 		return response;
 }
 
@@ -178,7 +216,9 @@ main ()
    memcpy(&saddr.sin_addr, name->h_addr_list[0], name->h_length);
 
    /* attempt to connect */
-   int	res = connect(sock, (struct sockaddr *)&saddr,	sizeof(saddr));
+   int	res = connect(sock,
+	   (struct sockaddr *)&saddr,
+	   sizeof(saddr));
    if (res < 0) {
 	   LOG("error when connecting to socket");
 	   exit(1);
@@ -238,8 +278,16 @@ main ()
 						   LOG(pong);
 						   LOG("end ping response");
 						   write(sock, pong, sizeof(pong));
+				   } else if (response.type == DEFAULT) {
+						   LOG("writing:");
+						   LOG(response.reply);
+						   write(sock,
+							   response.reply,
+							   sizeof(response.reply));
 				   }
-				   memset(line, 0 , BUFSIZ);
+				   memset(line          , 0, BUFSIZ);
+				   memset(response.reply, 0, BUFSIZ);
+				   memset(response.chan , 0, BUFSIZ);
 				   free(line);
 		   };
 		   
