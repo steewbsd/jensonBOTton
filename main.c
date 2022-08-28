@@ -161,8 +161,9 @@ filter_cmd(char * msg)
 int
 main ()
 {
-	/* initialize kqueue event for listening to PING messages */
-		
+   /* initialize commands */
+   init_commands();
+   /* initialize regex */
    int compose = regcomp(&match,
 	   filter,
 	   REG_EXTENDED);
@@ -171,6 +172,7 @@ main ()
 		   LOG("could not compose COMMAND regex");
 		   exit(1);
    }
+   
    int ping_compose = regcomp(&ping_message,
 	   ping_filter,
 	   REG_EXTENDED);
@@ -179,7 +181,8 @@ main ()
 		   LOG("could not compose PING regex");
 		   exit(1);
    }
-
+   
+   /* initialize kqueue event for listening to PING messages */
    struct kevent	event;
    struct kevent	trigger;
    printf("welcome to %s\n", NAME);

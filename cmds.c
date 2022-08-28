@@ -33,7 +33,7 @@ register_command(char * name,
 
 void
 init_commands() {
-		commands = malloc(50 * sizeof(struct command_t));
+		commands = malloc(MAX_COMMANDS * sizeof(struct command_t));
 		last_command = 0;
 		/* call for every command */
 		register_command("hello", cmd_hello);
