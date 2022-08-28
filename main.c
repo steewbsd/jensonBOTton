@@ -9,6 +9,8 @@
 #include <netinet/in.h>
 #include <netdb.h>
 
+#include "cmds.h"
+
 /* default bot name */
 char NAME[] = "JensonBotton";
 /* set logging verbosity */
@@ -35,15 +37,6 @@ const char  *filter = ":.+!.+@.+ PRIVMSG [#]+.+ :.*";
 
 regex_t		 ping_message;
 const char  *ping_filter = "PING .+";
-
-struct filter_cmd_response {
-		/* message to write */
-		char reply[BUFSIZ];
-		/* origin channel */
-		char chan[BUFSIZ];
-		/* type of reply */
-		enum {PING, NONE, DEFAULT} type;
-};
 
 /* DEBUG: NEEDS EXT. FREE */
 /* get line (no LF) from char buffer, free when done */
@@ -98,6 +91,7 @@ filter_cmd(char * msg)
 		recv = strndup(msg, BUFSIZ);
 		struct filter_cmd_response response;
 		response.type  = NONE;
+		strcpy(response.nick, IRC_NICK);
 		
 		int ping_result = regexec(&ping_message,
 			msg,
@@ -157,16 +151,7 @@ filter_cmd(char * msg)
 		recv += 1;
 		LOG("Command:");
 		LOG(recv);
-		if (strcmp(recv, "hello") == 0) {
-				LOG("Received hello command");
-				char reply[BUFSIZ];
-				sprintf(reply,
-					"\nPRIVMSG %s :Hi! I am %s\n",
-					response.chan,
-					IRC_NICK);
-				strcpy(response.reply, reply);
-				response.type  = DEFAULT;
-		}
+		cmd_handler(recv, &response);
 		/* TODO: actually return something to reply */
 		memset(recv, 0, BUFSIZ);
 		free(recv);
@@ -253,7 +238,7 @@ main ()
    for (;;) {
 	   /* add trigger event, this will trigger when one of our queued
 	   * events (see above in kevent() call) meets the filter, and
-	   * will store the event information here.
+XS	   * will store the event information here.
 	   * we add the timespec timeout, zero valued, so kevent is a
 	   * non-blocking call */
 	   ret = kevent(kq, NULL, 0, &trigger, 1, &timeout);
