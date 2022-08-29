@@ -6,26 +6,32 @@
 
 struct filter_cmd_response {
 		/* message to write */
-		char reply[BUFSIZ];
+		char		reply[BUFSIZ];
 		/* origin channel */
-		char chan[BUFSIZ];
+		char		chan[BUFSIZ];
 		/* irc nickname */
-		char nick[20];
+		char		nick[20];
 		/* type of reply */
-		enum {PING, NONE, DEFAULT} type;
+		enum {
+				PING, NONE, DEFAULT
+		}		type;
 };
 
 struct command_t {
 		/* function name */
-		char name[20];
+		char	name[20];
+		/* UNUSED: function type - builtin or lua script */
+		enum {
+				BUILTIN, SCRIPT_LUA
+		}       type;
 		/* function handler */
-		void (* handler)(struct filter_cmd_response *);
+		void		(*handler) (struct filter_cmd_response *);
 };
 
 void
-cmd_handler(char * cmd, struct filter_cmd_response * response);
+cmd_handler(char *cmd, struct filter_cmd_response *response);
 
 void
 init_commands();
 
-#endif /* _CMDS_H_ */
+#endif				/* _CMDS_H_ */
